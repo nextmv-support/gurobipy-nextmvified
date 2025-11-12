@@ -12,14 +12,14 @@ files:
 
 configuration:
   content:
-    format: "multi-file"
+    format: multi-file
     multi-file:
       input:
-        path: "."
+        path: .
       output:
-        solutions: "."
-        statistics: "statistics.json"
-        assets: "assets.json"
+        solutions: .
+        statistics: statistics.json
+        assets: assets.json
   options:
       items:
         - name: limit_dairy
@@ -28,4 +28,11 @@ configuration:
           required: false
           ui:
             control_type: toggle
-            display_name: "Limit dairy products"
+            display_name: Limit Dairy Products
+        - name: dairy_level
+          option_type: int
+          default: 10
+          required: false
+          ui:
+            control_type: input
+            display_name: Dairy Limit Amount

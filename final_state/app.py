@@ -32,7 +32,7 @@ if options.action == "sync" or options.action == "push":
 
 # Do a local run.
 if options.action == "local":
-    run_1 = local_app.new_run(input_dir_path=options.input_dir)
+    run_1 = local_app.new_run(input_dir_path=options.input_dir,)
     print(run_1)
 
 # Sync local application with cloud application.

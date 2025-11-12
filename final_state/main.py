@@ -11,6 +11,8 @@ import gurobipy as gp
 import nextmv
 from gurobipy import GRB
 from nextmv import cloud
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Nutrition guidelines, based on
 # USDA Dietary Guidelines for Americans, 2005
@@ -90,7 +92,7 @@ def printSolution(filename="solution.txt", append=False):
 
 
 if options.limit_dairy:
-    m.addConstr(buy.sum(["milk", "ice cream"]) <= 10, "limit_dairy")
+    m.addConstr(buy.sum(["milk", "ice cream"]) <= options.dairy_level, "limit_dairy")
 
 # Solve
 m.optimize()
@@ -111,3 +113,88 @@ with open(statistics_file, "w") as stats_f:
         ),
     )
     stats_f.write(json.dumps({"statistics": statistics.to_dict()}))
+
+print(f"Statistics written to {statistics_file}")
+
+# Plotly visualization: quantities and nutrition by category
+def plot_solution(m: gp.Model)  -> list[nextmv.Asset]:
+    if m.status != GRB.OPTIMAL:
+        return
+
+    # Quantities bought
+    quantities = {food: buy[food].X for food in foods}
+
+    fig_q = go.Figure(
+        data=[go.Bar(name="Amount",x=list(quantities.keys()), y=list(quantities.values()), marker_color="steelblue")]
+    )
+    fig_q.update_layout(title="Food purchase quantities", xaxis_title="Food", yaxis_title="Amount")
+
+    # Nutrition totals vs min/max
+    mins = []
+    actuals = []
+    maxs = []
+    for c in categories:
+        total = sum(nutritionValues[(f, c)] * quantities[f] for f in foods)
+        actuals.append(total)
+        mins.append(minNutrition[c])
+        maxs.append(None if maxNutrition[c] == GRB.INFINITY else maxNutrition[c])
+
+    # Actual as bars, Min and Max as marker dots
+    fig_n = go.Figure()
+    fig_n.add_trace(
+        go.Bar(name="Actual", x=categories, y=actuals, marker_color="orange")
+    )
+    fig_n.add_trace(
+        go.Scatter(
+            name="Min",
+            x=categories,
+            y=mins,
+            mode="markers",
+            marker=dict(color="lightgreen", size=10, symbol="circle"),
+        )
+    )
+    # only add max markers if at least one finite max exists
+    if any(v is not None for v in maxs):
+        fig_n.add_trace(
+            go.Scatter(
+                name="Max",
+                x=categories,
+                y=[(v if v is not None else None) for v in maxs],
+                mode="markers",
+                marker=dict(color="crimson", size=10, symbol="circle"),
+            )
+        )
+
+    fig_n.update_layout(barmode="group", title="Nutrition by category", yaxis_title="Amount")
+
+    # Combine into one HTML with two subplots
+    fig = make_subplots(rows=2, cols=1, subplot_titles=("Food quantities", "Nutrition by category"), vertical_spacing=0.15)
+    for t in fig_q.data:
+        fig.add_trace(t, row=1, col=1)
+    for t in fig_n.data:
+        fig.add_trace(t, row=2, col=1)
+    fig.update_layout(height=800, showlegend=True)
+
+    assets = []
+    assets.append(
+        nextmv.Asset(
+            name="Diet Results",
+            content_type="json",
+            visual=nextmv.Visual(
+                visual_schema=nextmv.VisualSchema.PLOTLY,
+                visual_type="custom-tab",
+                label="Food Selection",
+            ),
+            content=[json.loads(fig.to_json())],
+        )
+    )
+    return assets
+
+# MODIFIED - write statistics to statistics.json
+assets = plot_solution(m)
+# Write assets to file
+assets_file = "assets.json"
+with open(assets_file, "w") as assets_f:
+    assets_dict = {"assets": [asset.to_dict() for asset in assets]}
+    assets_f.write(json.dumps(assets_dict, indent=2))
+print(f"Assets written to {assets_file}")
